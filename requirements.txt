@@ -1,0 +1,10 @@
+numpy
+scipy
+plotly
+torch
+pandas
+pyarrow
+matplotlib
+scikit-learn
+torch-geometric
+fastparquet
