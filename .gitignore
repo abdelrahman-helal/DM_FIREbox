@@ -1,0 +1,22 @@
+# Data files and directories
+data/
+Data/
+*.txt
+*.parquet
+*.csv
+*.h5
+*.hdf5
+
+# Virtual environments
+.env
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
