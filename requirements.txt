@@ -7,4 +7,6 @@ pyarrow
 matplotlib
 scikit-learn
 torch-geometric
+torch-sparse
+pyg-lib
 fastparquet
