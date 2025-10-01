@@ -95,5 +95,6 @@ def evaluate_full_graph(model, data, device, predict_var=False):
     trues = data.y[test_mask].view(-1).cpu()
     
     mse = F.mse_loss(preds, trues).item()
+    mae = F.l1_loss(preds, trues).item()
     rmse = np.sqrt(mse)
-    return rmse, preds.numpy(), trues.numpy()
+    return rmse, mae, preds.numpy(), trues.numpy()

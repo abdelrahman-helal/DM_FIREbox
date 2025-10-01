@@ -8,12 +8,13 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
 class DataProcessor():
-    def __init__(self):
+    def __init__(self, file_path='../data/FIREbox_z=0.txt'):
+        self.file_path = file_path
         self.df = None
         self.data = Data()
         self.df_filtered = self.load_data()
 
-    def load_data(self, file_path='data/firebox_data/FIREbox_z=0.txt'):
+    def load_data(self):
         """
         Load FIREbox data from text file and process it.
         
@@ -31,7 +32,7 @@ class DataProcessor():
             - Position values divided by 10^2 to convert from dividing by H0/100 to H0
         """
         # Read the data file, skipping comment lines (starting with #)
-        self.df = pd.read_csv(file_path, sep=r'\s+', comment='#')
+        self.df = pd.read_csv(self.file_path, sep=r'\s+', comment='#')
         
         # Filter for rows where hostHaloID = -1
         df_filtered = self.df[self.df['hostHaloID'] == -1].copy()
@@ -97,33 +98,6 @@ class DataProcessor():
         )
         
         # Create k-NN graph connectivity based on spatial coordinates
-        # Use pos_x, pos_y, pos_z (columns 1, 2, 3 in feature array)    
-        
-        # For training graph
-        # nbrs_train = NearestNeighbors(n_neighbors=k+1, algorithm='kd_tree').fit(X_train[:, 1:4])  
-        # distances_train, indices_train = nbrs_train.kneighbors(X_train[:, 1:4])
-        # pos_train = torch.tensor(X_train[:, 1:4], dtype=torch.float)
-
-        # # Remove self-loops (first neighbor is always the point itself)
-        # edge_index_train = []
-        # for i, neighbors in enumerate(indices_train):
-        #     for j in neighbors[1:]:  # Skip first neighbor (self)
-        #         edge_index_train.append([i, j])
-        
-        # edge_index_train = torch.tensor(edge_index_train, dtype=torch.long).t().contiguous()
-        
-        # # For test graph
-        # nbrs_test = NearestNeighbors(n_neighbors=k+1, algorithm='kd_tree').fit(X_test[:, 1:4])
-        # distances_test, indices_test = nbrs_test.kneighbors(X_test[:, 1:4])
-        # pos_test = torch.tensor(X_test[:, 1:4], dtype=torch.float)
-
-        # edge_index_test = []
-        # for i, neighbors in enumerate(indices_test):
-        #     for j in neighbors[1:]:  # Skip first neighbor (self)
-        #         edge_index_test.append([i, j])
-        
-        # edge_index_test = torch.tensor(edge_index_test, dtype=torch.long).t().contiguous()
-        # 3. build kNN edges from physical positions (columns pos_x,pos_y,pos_z are at indices 1..3)
         pos_arr = X_scaled[:, 1:4]  # already scaled; KDTree on scaled coords is fine
         nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='kd_tree').fit(pos_arr)
         distances, indices = nbrs.kneighbors(pos_arr)
@@ -166,8 +140,8 @@ class DataProcessor():
         return self.data, self.scaler
 
 
-if __name__ == "__main__":
-    data_processor = DataProcessor()
-    data_processor.create_graph_data()
-    print(data_processor.data)
-    print(data_processor.data.train_mask)
+# if __name__ == "__main__":
+#     data_processor = DataProcessor()
+#     data_processor.create_graph_data()
+#     print(data_processor.data)
+#     print(data_processor.data.train_mask)
