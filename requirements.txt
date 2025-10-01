@@ -10,3 +10,4 @@ torch-geometric
 torch-sparse
 pyg-lib
 fastparquet
+wandb

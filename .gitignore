@@ -1,11 +1,5 @@
 # Data files and directories
 data/
-Data/
-*.txt
-*.parquet
-*.csv
-*.h5
-*.hdf5
 
 # Virtual environments
 .env
@@ -15,8 +9,16 @@ Data/
 .ipynb_checkpoints
 
 # Logs
-*.log
+logs/
+*.pt 
 
 # Temporary files
 *.tmp
 *.temp
+
+# wandb 
+notebooks/wandb/
+wandb/
+
+# pycache
+__pycache__/
