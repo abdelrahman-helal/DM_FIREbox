@@ -1,8 +1,12 @@
 import torch
 import numpy as np
 import pandas as pd
+
 import torch_geometric
 from torch_geometric.data import Data
+
+from scipy.spatial import cKDTree
+from sklearn.neighbors import KDTree
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -29,7 +33,6 @@ class DataProcessor():
             Processed dataframe with:
             - Only rows where hostHaloID = -1
             - Xc, Yc, Zc columns renamed to pos_x, pos_y, pos_z
-            - Position values divided by 10^2 to convert from dividing by H0/100 to H0
         """
         # Read the data file, skipping comment lines (starting with #)
         self.df = pd.read_csv(self.file_path, sep=r'\s+', comment='#')
@@ -48,13 +51,13 @@ class DataProcessor():
         })
         
         # Divide position values by 10^3
-        df_filtered['pos_x'] = df_filtered['pos_x'] / 100
-        df_filtered['pos_y'] = df_filtered['pos_y'] / 100
-        df_filtered['pos_z'] = df_filtered['pos_z'] / 100
+        # df_filtered['pos_x'] = df_filtered['pos_x'] / 100
+        # df_filtered['pos_y'] = df_filtered['pos_y'] / 100
+        # df_filtered['pos_z'] = df_filtered['pos_z'] / 100
         
         return df_filtered
 
-    def create_graph_data(self, k=5, test_size=0.2, 
+    def create_graph_data(self, k=5, r=5, leaf_size=40, test_size=0.2, 
                         random_state=42, include_lg_Mstar=False, stratify_bins=5):
         """
         Create a PyTorch Geometric graph from the FIREbox data.
@@ -92,22 +95,26 @@ class DataProcessor():
         self.scaler = StandardScaler()
         X_scaled = self.scaler.fit_transform(X)
         
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_scaled, y, test_size=test_size, random_state=random_state
-        )
+        # num_bins = 10
+        # bins = np.linspace(y.min(), y.max(), num_bins)
+        # y_binned = np.digitize(y, bins)
+        # # Split data
+        # X_train, X_test, y_train, y_test = train_test_split(
+        #     X_scaled, y, test_size=test_size, random_state=random_state, stratify=y
+        # )
         
         # Create k-NN graph connectivity based on spatial coordinates
         pos_arr = X_scaled[:, 1:4]  # already scaled; KDTree on scaled coords is fine
-        nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='kd_tree').fit(pos_arr)
-        distances, indices = nbrs.kneighbors(pos_arr)
-
-        edges = []
-        for i, neigh in enumerate(indices):
-            for j in neigh[1:]:           # skip self
-                edges.append([i, j])
-                edges.append([j, i])      # add reverse for undirected behavior
-        edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()  # [2, E]
+        # nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='kd_tree').fit(pos_arr)
+        # distances, indices = nbrs.kneighbors(pos_arr)
+        nbrs = cKDTree(pos_arr)
+        indices = nbrs.query_pairs(r=r, output_type='ndarray')
+        # for i, neigh in enumerate(indices):
+        #     for j in neigh[1:]:           # skip self
+        #         edges.append([i, j])
+        #         edges.append([j, i])      # add reverse for undirected behavior
+        edge_index = torch.tensor(indices, dtype=torch.long).t().contiguous()  # [2, E]
+        edge_index = torch_geometric.utils.to_undirected(edge_index)
 
         N = len(self.df_filtered)
         idx = np.arange(N)
@@ -122,7 +129,7 @@ class DataProcessor():
         else:
             train_idx, test_idx = train_test_split(idx, test_size=test_size,
                                                 random_state=random_state)
-
+        
         train_mask = torch.zeros(N, dtype=torch.bool)
         test_mask = torch.zeros(N, dtype=torch.bool)
         train_mask[train_idx] = True
