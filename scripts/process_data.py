@@ -57,7 +57,7 @@ class DataProcessor():
         
         return df_filtered
 
-    def create_graph_data(self, k=5, r=5, leaf_size=40, test_size=0.2, 
+    def create_graph_data(self, k=None, r=1, leaf_size=40, test_size=0.2, standardize=True,
                         random_state=42, include_lg_Mstar=False, stratify_bins=5):
         """
         Create a PyTorch Geometric graph from the FIREbox data.
@@ -92,8 +92,11 @@ class DataProcessor():
         y = self.df_filtered[target_col].values
         
         # Normalize features
-        self.scaler = StandardScaler()
-        X_scaled = self.scaler.fit_transform(X)
+        if standardize:
+            self.scaler = StandardScaler()
+            X_scaled = self.scaler.fit_transform(X)
+        else:
+            X_scaled = X
         
         # num_bins = 10
         # bins = np.linspace(y.min(), y.max(), num_bins)
@@ -105,16 +108,24 @@ class DataProcessor():
         
         # Create k-NN graph connectivity based on spatial coordinates
         pos_arr = X_scaled[:, 1:4]  # already scaled; KDTree on scaled coords is fine
-        # nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='kd_tree').fit(pos_arr)
-        # distances, indices = nbrs.kneighbors(pos_arr)
-        nbrs = cKDTree(pos_arr)
-        indices = nbrs.query_pairs(r=r, output_type='ndarray')
-        # for i, neigh in enumerate(indices):
-        #     for j in neigh[1:]:           # skip self
-        #         edges.append([i, j])
-        #         edges.append([j, i])      # add reverse for undirected behavior
-        edge_index = torch.tensor(indices, dtype=torch.long).t().contiguous()  # [2, E]
-        edge_index = torch_geometric.utils.to_undirected(edge_index)
+        if k:
+            nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='kd_tree').fit(pos_arr)
+            distances, indices = nbrs.kneighbors(pos_arr)   
+            
+            edges = []
+            for i, neigh in enumerate(indices):
+                for j in neigh[1:]:           # skip self
+                    edges.append([i, j])
+                    edges.append([j, i])      # add reverse for undirected behavior
+            edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()  # [2, E]
+            edge_index = torch_geometric.utils.to_undirected(edge_index)
+
+        else:
+            nbrs = cKDTree(pos_arr)
+            indices = nbrs.query_pairs(r=r, output_type='ndarray')
+
+            edge_index = torch.tensor(indices, dtype=torch.long).t().contiguous()  # [2, E]
+            edge_index = torch_geometric.utils.to_undirected(edge_index)
 
         N = len(self.df_filtered)
         idx = np.arange(N)
@@ -144,7 +155,7 @@ class DataProcessor():
         self.data.train_mask = train_mask
         self.data.test_mask = test_mask
 
-        return self.data, self.scaler
+        return self.data
 
 
 # if __name__ == "__main__":
