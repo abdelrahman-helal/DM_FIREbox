@@ -57,7 +57,7 @@ class DataProcessor():
         
         return df_filtered
 
-    def create_graph_data(self, k=None, r=1, leaf_size=40, test_size=0.2, 
+    def create_graph_data(self, k=None, r=1, leaf_size=40, test_size=0.2, standardize=True,
                         random_state=42, include_lg_Mstar=True, stratify_bins=10):
         """
         Create a PyTorch Geometric graph from the FIREbox data.
@@ -89,7 +89,6 @@ class DataProcessor():
         
         # Halo mass cuttof for galaxy formation
         self.df_filtered = self.df_filtered[self.df_filtered['lg_Mhalo'] > 9.5]
-        
         # Extract features and target
         X = self.df_filtered[feature_cols].values
         y = self.df_filtered[target_col].values
