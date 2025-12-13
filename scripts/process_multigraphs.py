@@ -63,7 +63,7 @@ class DataProcessor():
                       random_state=42, include_lg_Mstar=True, stratify_bins=10,
                       graph_type='knn',       # 'knn', 'ws', 'ba', or 'radius'
                       ws_beta=0.1, ws_lambda=0.5, ws_random_shortcuts=False,
-                      ba_m=2, ba_a=0.01, ba_lambda=0.5, ba_gamma=1.0, ba_order_by='mass', ba_cutoff=None):
+                      ba_m=5, ba_a=0.01, ba_lambda=0.5, ba_gamma=1.0, ba_order_by='mass', ba_cutoff=None):
 
                 # Define feature columns and target
         if include_lg_Mstar:
