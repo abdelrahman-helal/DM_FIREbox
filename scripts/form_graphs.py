@@ -41,18 +41,15 @@ def build_spatial_ws_edges(pos_arr, radii, K, beta=0.1, lambda_decay=1.0, random
 
     # Convert to list for rewiring iteration
     edges = list(edges)
-    # We'll rewire directed edges (i,j) by replacing j with k sampled appropriately
-    for (i, j) in list(edges):  # iterate over a snapshot; we'll mutate edges list later
+    # Rewire directed edges (i,j) by replacing j with k sampled appropriately
+    for (i, j) in list(edges):  
         if rng.random() < beta:
-            # remove this (i,j)
             try:
                 edges.remove((i, j))
             except ValueError:
-                # it might have already been removed as reciprocal - ignore
                 pass
 
             if random_shortcuts:
-                # pick uniform random node not i
                 candidates = np.arange(N)
                 candidates = candidates[candidates != i]
                 k = rng.choice(candidates)
@@ -61,7 +58,6 @@ def build_spatial_ws_edges(pos_arr, radii, K, beta=0.1, lambda_decay=1.0, random
                 dists = _pairwise_distance(pos_arr[i], pos_arr)  # (N,)
                 # normalized distance s = d / (ri + rk)
                 denom = (radii[i] + radii)
-                # avoid division by zero
                 denom = np.maximum(denom, 1e-8)
                 s = dists / denom
                 # kernel
@@ -96,7 +92,7 @@ def build_spatial_ws_edges(pos_arr, radii, K, beta=0.1, lambda_decay=1.0, random
     else:
         dists = np.linalg.norm(pos_arr[edge_list[:, 0]] - pos_arr[edge_list[:, 1]], axis=1)
         overlap = np.array([overlap_fraction(d, radii[i], radii[j]) for d, i, j in zip(dists, edge_list[:,0], edge_list[:,1])])
-        # weight by spatial kernel (you can later normalize)
+        # weight by spatial kernel 
         weight = np.exp(- (dists / (radii[edge_list[:,0]] + radii[edge_list[:,1]] + 1e-8)) / lambda_decay)
         edge_attr = {
             'distance': torch.tensor(dists, dtype=torch.float).unsqueeze(1),
@@ -123,7 +119,7 @@ def build_spatial_ba_edges(pos_arr, radii, mass_array=None, m=2, a=0.01, lambda_
     """
     N = pos_arr.shape[0]
     if order_by == 'mass' and mass_array is not None:
-        # we want higher mass to arrive earlier or later? choose descending -> big halos earlier
+        # higher mass arrives earlier 
         order = np.argsort(-mass_array)
     else:
         order = np.arange(N)
@@ -147,7 +143,7 @@ def build_spatial_ba_edges(pos_arr, radii, mass_array=None, m=2, a=0.01, lambda_
     for t in order[m0:]:
         # potential existing nodes = nodes currently in graph
         existing = np.array([n for n in range(N) if n in order[:np.where(order==t)[0][0]]]) if False else np.array([n for n in range(N) if degrees[n] > 0])
-        # fallback if no existing (shouldn't happen)
+        # fallback if no existing 
         if existing.size == 0:
             existing = np.array(initial)
 

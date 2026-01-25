@@ -90,12 +90,9 @@ class DataProcessor():
             X_scaled = X
 
         pos_arr = X_scaled[:, 1:4]  # scaled positions
-        radii = X_scaled[:, 0]      # you used 'Rhalo' as first col; ensure Rhalo is in same units as pos scaling
-        # NOTE: if Rhalo is not in the same scale (e.g., it's physical radius vs scaled coords),
-        # you may prefer to use original radii (self.df_filtered['Rhalo'].values) instead of scaled.
+        radii = X_scaled[:, 0]      
 
         if graph_type == 'knn':
-            # keep your existing kNN logic
             nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='kd_tree').fit(pos_arr)
             distances, indices = nbrs.kneighbors(pos_arr)
 
@@ -132,7 +129,7 @@ class DataProcessor():
                                                         random_shortcuts=ws_random_shortcuts)
 
         elif graph_type == 'ba':
-            # use lg_Mhalo as mass ordering by default (you computed y earlier)
+            # use lg_Mhalo as mass ordering by default
             mass_array = y  # y is lg_Mhalo array from above
             edge_index, edge_attr = build_spatial_ba_edges(pos_arr, radii, mass_array=mass_array,
                                                         m=ba_m, a=ba_a, lambda_decay=ba_lambda,
@@ -143,7 +140,7 @@ class DataProcessor():
             indices = nbrs.query_pairs(r=r, output_type='ndarray')
             edge_index = torch.tensor(indices, dtype=torch.long).t().contiguous()
             edge_index = torch_geometric.utils.to_undirected(edge_index)
-            # compute edge_attr as above (omitted for brevity)
+            # compute edge_attr as above 
             edge_attr = {}
 
         N = len(self.df_filtered)
@@ -165,8 +162,7 @@ class DataProcessor():
         train_mask[train_idx] = True
         test_mask[test_idx] = True
         # Attach edge attributes to PyG data object
-        # PyG expects edge_attr aligned with edge_index columns; for simplicity we keep attributes per undirected edge list
-        # If edge_attr exists as dict with tensors sized [E,1], we can combine them into single edge_attr tensor:
+
         if edge_attr:
             # stack attributes into one tensor [E, n_attr]
             attr_list = [edge_attr[k] for k in ['distance', 'overlap', 'weight'] if k in edge_attr]
@@ -186,7 +182,7 @@ class DataProcessor():
                 pos=torch.tensor(pos_arr, dtype=torch.float),
             )
 
-        # masks unchanged...
+        # masks unchanged
         self.data.train_mask = train_mask
         self.data.test_mask = test_mask
 
