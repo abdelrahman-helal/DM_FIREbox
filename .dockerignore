@@ -1,0 +1,20 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Jupyter
+notebooks/
+*.ipynb
+
+# Data
+data/
+
+# Logs & checkpoints
+logs/
+*.pt
+*.ckpt

@@ -1,0 +1,18 @@
+data:
+  file: firebox_data/FIREbox_z=0.txt
+
+model:
+  num_layers: 2
+  hidden_channels: 64
+  mlp_hidden: 128
+
+training:
+  lr: 0.001
+  epochs: 100
+
+wandb:
+  enabled: true
+  project: DM_FIREbox
+  entity: null
+  name: null
+  mode: online
