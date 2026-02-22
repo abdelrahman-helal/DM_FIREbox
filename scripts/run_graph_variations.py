@@ -40,19 +40,19 @@ print(f"Data:   {DATA_PATH}\n")
 # ── Build datasets ────────────────────────────────────────────────────────────
 print("Building KDTree dataset...")
 dp_kdtree = DataProcessor(file_path=DATA_PATH)
-dp_kdtree.create_graph_data(graph_type='kdtree', include_lg_Mstar=True,
+dp_kdtree.create_graph_data(graph_type='kdtree',
                              stratify_bins=10, standardize=True)
 data_kdtree = dp_kdtree.data
 
 print("Building Watts-Strogatz dataset...")
 dp_ws = DataProcessor(file_path=DATA_PATH)
-dp_ws.create_graph_data(k=10, graph_type='ws', include_lg_Mstar=True,
+dp_ws.create_graph_data(k=10, graph_type='ws',
                          stratify_bins=10, standardize=True, ws_beta=0.1)
 data_ws = dp_ws.data
 
 print("Building Barabasi-Albert dataset...")
 dp_ba = DataProcessor(file_path=DATA_PATH)
-dp_ba.create_graph_data(k=10, graph_type='ba', include_lg_Mstar=True,
+dp_ba.create_graph_data(k=10, graph_type='ba',
                          stratify_bins=10, standardize=True)
 data_ba = dp_ba.data
 

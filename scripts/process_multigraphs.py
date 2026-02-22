@@ -60,20 +60,16 @@ class DataProcessor():
         return df_filtered
     
     def create_graph_data(self, k=None, r=1, leaf_size=40, test_size=0.1, val_size=0.1,
-                      standardize=True, random_state=42, include_lg_Mstar=True,
+                      standardize=True, random_state=42,
                       stratify_bins=10,
                       graph_type='knn',       # 'knn', 'ws', 'ba', or 'radius'
                       ws_beta=0.1, ws_lambda=0.5, ws_random_shortcuts=False,
                       ba_m=5, ba_a=0.01, ba_lambda=0.5, ba_gamma=1.0, ba_order_by='mass', ba_cutoff=None):
 
-        # Define feature columns and target
-        if include_lg_Mstar:
-            feature_cols = ['Rhalo', 'pos_x', 'pos_y', 'pos_z',
-                            'vel_x', 'vel_y', 'vel_z', 'lg_Mstar_<Rhalo']
-            self.df_filtered = self.df_filtered[self.df_filtered['lg_Mstar_<Rhalo'] > 0]
-        else:
-            feature_cols = ['Rhalo', 'pos_x', 'pos_y', 'pos_z',
-                            'vel_x', 'vel_y', 'vel_z']
+        # Define feature columns and target (matches process_data.py column order)
+        self.df_filtered = self.df_filtered[self.df_filtered['lg_Mstar_<Rhalo'] > 0]
+        feature_cols = ['pos_x', 'pos_y', 'pos_z',
+                        'vel_x', 'vel_y', 'vel_z', 'lg_Mstar_<Rhalo', 'Rhalo']
 
         target_col = 'lg_Mhalo'
 
@@ -112,8 +108,8 @@ class DataProcessor():
             X[test_idx]  = self.scaler.transform(X[test_idx])
         X_scaled = X
 
-        pos_arr = X_scaled[:, 1:4]  # scaled positions (Rhalo is index 0)
-        radii = X_scaled[:, 0]
+        pos_arr = X_scaled[:, 0:3]  # scaled positions (pos_x, pos_y, pos_z)
+        radii = X_scaled[:, 7]     # Rhalo is index 7
 
         if graph_type == 'knn':
             nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='kd_tree').fit(pos_arr)
