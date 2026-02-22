@@ -59,38 +59,61 @@ class DataProcessor():
         
         return df_filtered
     
-    def create_graph_data(self, k=None, r=1, leaf_size=40, test_size=0.2, standardize=True,
-                      random_state=42, include_lg_Mstar=True, stratify_bins=10,
+    def create_graph_data(self, k=None, r=1, leaf_size=40, test_size=0.1, val_size=0.1,
+                      standardize=True, random_state=42, include_lg_Mstar=True,
+                      stratify_bins=10,
                       graph_type='knn',       # 'knn', 'ws', 'ba', or 'radius'
                       ws_beta=0.1, ws_lambda=0.5, ws_random_shortcuts=False,
                       ba_m=5, ba_a=0.01, ba_lambda=0.5, ba_gamma=1.0, ba_order_by='mass', ba_cutoff=None):
 
-                # Define feature columns and target
+        # Define feature columns and target
         if include_lg_Mstar:
-            feature_cols = ['Rhalo', 'pos_x', 'pos_y', 'pos_z',\
+            feature_cols = ['Rhalo', 'pos_x', 'pos_y', 'pos_z',
                             'vel_x', 'vel_y', 'vel_z', 'lg_Mstar_<Rhalo']
             self.df_filtered = self.df_filtered[self.df_filtered['lg_Mstar_<Rhalo'] > 0]
         else:
-            feature_cols = ['Rhalo', 'pos_x', 'pos_y', 'pos_z', \
+            feature_cols = ['Rhalo', 'pos_x', 'pos_y', 'pos_z',
                             'vel_x', 'vel_y', 'vel_z']
 
         target_col = 'lg_Mhalo'
-        
-        # Halo mass cuttof for galaxy formation
+
+        # Halo mass cutoff for galaxy formation
         self.df_filtered = self.df_filtered[self.df_filtered['lg_Mhalo'] > 9.5]
-        # Extract features and target
-        X = self.df_filtered[feature_cols].values
+
+        X = self.df_filtered[feature_cols].values.astype(np.float64)
         y = self.df_filtered[target_col].values
-        
-        # Normalize features
+
+        N = len(self.df_filtered)
+        idx = np.arange(N)
+
+        # ── 3-way stratified split (train / val / test) ──────────────────────
+        # Split indices BEFORE fitting the scaler to prevent data leakage.
+        if stratify_bins is not None:
+            bins = np.percentile(y, np.linspace(0, 100, stratify_bins + 1))
+            y_bins = np.digitize(y, bins[1:-1])
+        else:
+            y_bins = None
+
+        temp_idx, test_idx = train_test_split(
+            idx, test_size=test_size, random_state=random_state,
+            stratify=y_bins)
+
+        y_bins_temp = y_bins[temp_idx] if y_bins is not None else None
+        val_frac_of_temp = val_size / (1.0 - test_size)
+        train_idx, val_idx = train_test_split(
+            temp_idx, test_size=val_frac_of_temp, random_state=random_state,
+            stratify=y_bins_temp)
+
+        # ── Fit scaler on training rows ONLY, then transform all rows ────────
         if standardize:
             self.scaler = StandardScaler()
-            X_scaled = self.scaler.fit_transform(X)
-        else:
-            X_scaled = X
+            X[train_idx] = self.scaler.fit_transform(X[train_idx])
+            X[val_idx]   = self.scaler.transform(X[val_idx])
+            X[test_idx]  = self.scaler.transform(X[test_idx])
+        X_scaled = X
 
-        pos_arr = X_scaled[:, 1:4]  # scaled positions
-        radii = X_scaled[:, 0]      
+        pos_arr = X_scaled[:, 1:4]  # scaled positions (Rhalo is index 0)
+        radii = X_scaled[:, 0]
 
         if graph_type == 'knn':
             nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='kd_tree').fit(pos_arr)
@@ -143,30 +166,18 @@ class DataProcessor():
             # compute edge_attr as above 
             edge_attr = {}
 
-        N = len(self.df_filtered)
-        idx = np.arange(N)
-
-        # stratify by mass bins to keep mass distribution across train/test
-        if stratify_bins is not None:
-            bins = np.percentile(y, np.linspace(0, 100, stratify_bins + 1))
-            y_bins = np.digitize(y, bins[1:-1])
-            train_idx, test_idx = train_test_split(idx, test_size=test_size,
-                                                random_state=random_state,
-                                                stratify=y_bins)
-        else:
-            train_idx, test_idx = train_test_split(idx, test_size=test_size,
-                                                random_state=random_state)
-        
+        # ── Build masks ───────────────────────────────────────────────────────
         train_mask = torch.zeros(N, dtype=torch.bool)
-        test_mask = torch.zeros(N, dtype=torch.bool)
+        val_mask   = torch.zeros(N, dtype=torch.bool)
+        test_mask  = torch.zeros(N, dtype=torch.bool)
         train_mask[train_idx] = True
-        test_mask[test_idx] = True
-        # Attach edge attributes to PyG data object
+        val_mask[val_idx]     = True
+        test_mask[test_idx]   = True
 
+        # ── Attach edge attributes to PyG data object ─────────────────────────
         if edge_attr:
-            # stack attributes into one tensor [E, n_attr]
             attr_list = [edge_attr[k] for k in ['distance', 'overlap', 'weight'] if k in edge_attr]
-            edge_attr_tensor = torch.cat(attr_list, dim=1)  # shape [E, num_attr]
+            edge_attr_tensor = torch.cat(attr_list, dim=1)
             self.data = Data(
                 x=torch.tensor(X_scaled, dtype=torch.float),
                 edge_index=edge_index,
@@ -182,8 +193,8 @@ class DataProcessor():
                 pos=torch.tensor(pos_arr, dtype=torch.float),
             )
 
-        # masks unchanged
         self.data.train_mask = train_mask
-        self.data.test_mask = test_mask
+        self.data.val_mask   = val_mask
+        self.data.test_mask  = test_mask
 
         return self.data
