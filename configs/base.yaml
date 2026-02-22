@@ -8,7 +8,7 @@ model:
 
 training:
   lr: 0.001
-  epochs: 100
+  epochs: 300
 
 wandb:
   enabled: true

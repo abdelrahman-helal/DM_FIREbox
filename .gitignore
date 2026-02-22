@@ -22,3 +22,6 @@ wandb/
 
 # pycache
 __pycache__/
+
+# Paper (LaTeX source and figures)
+paper/

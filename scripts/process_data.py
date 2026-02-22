@@ -57,105 +57,115 @@ class DataProcessor():
         
         return df_filtered
 
-    def create_graph_data(self, k=None, r=1, leaf_size=40, test_size=0.2, standardize=True,
-                        random_state=42, include_lg_Mstar=True, stratify_bins=10):
+    def create_graph_data(self, k=None, r=1, leaf_size=40, test_size=0.1, val_size=0.1,
+                        standardize=True, random_state=42, include_Rhalo=False,
+                        stratify_bins=10):
         """
         Create a PyTorch Geometric graph from the FIREbox data.
-        
+
         Parameters:
         -----------
-        df : pd.DataFrame
-            The processed FIREbox dataframe
         k : int
-            Number of nearest neighbors for graph connectivity
+            Number of nearest neighbors for graph connectivity (None → radius-based)
+        r : float
+            Radius for radius-based connectivity (used when k is None)
         test_size : float
-            Fraction of data to use for testing
+            Fraction of data held out as the final test set (default 0.10)
+        val_size : float
+            Fraction of data used for validation / early-stopping (default 0.10)
         random_state : int
             Random seed for reproducibility
-        include_lg_Mstar : bool
-            Whether to include lg_Mstar_<Rhalo in the feature set
+        include_Rhalo : bool
+            Whether to add Rhalo as an input feature
+        stratify_bins : int
+            Number of mass-percentile bins used to stratify all splits
         """
-        
+
         # Define feature columns and target
-        if include_lg_Mstar:
-            feature_cols = ['Rhalo', 'pos_x', 'pos_y', 'pos_z',\
-                            'vel_x', 'vel_y', 'vel_z', 'lg_Mstar_<Rhalo']
-            self.df_filtered = self.df_filtered[self.df_filtered['lg_Mstar_<Rhalo'] > 0]
-        else:
-            feature_cols = ['Rhalo', 'pos_x', 'pos_y', 'pos_z', \
-                            'vel_x', 'vel_y', 'vel_z']
+        self.df_filtered = self.df_filtered[self.df_filtered['lg_Mstar_<Rhalo'] > 0]
+
+        feature_cols = ['pos_x', 'pos_y', 'pos_z',
+                        'vel_x', 'vel_y', 'vel_z', 'lg_Mstar_<Rhalo']
+        if include_Rhalo:
+            feature_cols += ['Rhalo']
 
         target_col = 'lg_Mhalo'
-        
-        # Halo mass cuttof for galaxy formation
+
+        # Halo mass cutoff for galaxy formation
         self.df_filtered = self.df_filtered[self.df_filtered['lg_Mhalo'] > 9.5]
-        # Extract features and target
-        X = self.df_filtered[feature_cols].values
+
+        X = self.df_filtered[feature_cols].values.astype(np.float64)
         y = self.df_filtered[target_col].values
-        
-        # Normalize features
-        if standardize:
-            self.scaler = StandardScaler()
-            X_scaled = self.scaler.fit_transform(X)
-        else:
-            X_scaled = X
-        
-        # num_bins = 10
-        # bins = np.linspace(y.min(), y.max(), num_bins)
-        # y_binned = np.digitize(y, bins)
-        # # Split data
-        # X_train, X_test, y_train, y_test = train_test_split(
-        #     X_scaled, y, test_size=test_size, random_state=random_state, stratify=y
-        # )
-        
-        # Create k-NN graph connectivity based on spatial coordinates
-        pos_arr = X_scaled[:, 1:4]  # already scaled; KDTree on scaled coords is fine
-        if k:
-            nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='kd_tree').fit(pos_arr)
-            distances, indices = nbrs.kneighbors(pos_arr)   
-            
-            edges = []
-            for i, neigh in enumerate(indices):
-                for j in neigh[1:]:           # skip self
-                    edges.append([i, j])
-                    edges.append([j, i])      # add reverse for undirected behavior
-            edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()  # [2, E]
-            edge_index = torch_geometric.utils.to_undirected(edge_index)
-
-        else:
-            nbrs = cKDTree(pos_arr)
-            indices = nbrs.query_pairs(r=r, output_type='ndarray')
-
-            edge_index = torch.tensor(indices, dtype=torch.long).t().contiguous()  # [2, E]
-            edge_index = torch_geometric.utils.to_undirected(edge_index)
 
         N = len(self.df_filtered)
         idx = np.arange(N)
 
-        # stratify by mass bins to keep mass distribution across train/test
+        # ── 3-way stratified split (train / val / test) ──────────────────────
+        # Split indices BEFORE fitting the scaler to prevent data leakage.
         if stratify_bins is not None:
             bins = np.percentile(y, np.linspace(0, 100, stratify_bins + 1))
             y_bins = np.digitize(y, bins[1:-1])
-            train_idx, test_idx = train_test_split(idx, test_size=test_size,
-                                                random_state=random_state,
-                                                stratify=y_bins)
         else:
-            train_idx, test_idx = train_test_split(idx, test_size=test_size,
-                                                random_state=random_state)
-        
+            y_bins = None
+
+        temp_idx, test_idx = train_test_split(
+            idx, test_size=test_size, random_state=random_state,
+            stratify=y_bins)
+
+        y_bins_temp = y_bins[temp_idx] if y_bins is not None else None
+        # val_size fraction of the full dataset → fraction of temp set
+        val_frac_of_temp = val_size / (1.0 - test_size)
+        train_idx, val_idx = train_test_split(
+            temp_idx, test_size=val_frac_of_temp, random_state=random_state,
+            stratify=y_bins_temp)
+
+        # ── Fit scaler on training rows ONLY, then transform all rows ────────
+        if standardize:
+            self.scaler = StandardScaler()
+            X[train_idx] = self.scaler.fit_transform(X[train_idx])
+            X[val_idx]   = self.scaler.transform(X[val_idx])
+            X[test_idx]  = self.scaler.transform(X[test_idx])
+        X_scaled = X
+
+        # ── Build graph on scaled positions (all nodes, transductive setting) ─
+        pos_arr = X_scaled[:, 0:3]
+        if k:
+            nbrs = NearestNeighbors(n_neighbors=k + 1, algorithm='kd_tree').fit(pos_arr)
+            distances, indices = nbrs.kneighbors(pos_arr)
+
+            edges = np.zeros((N * k * 2, 2), dtype=np.int64)
+            edge_ptr = 0
+            for i, neigh in enumerate(indices):
+                for j in neigh[1:]:
+                    edges[edge_ptr]     = [i, j]
+                    edges[edge_ptr + 1] = [j, i]
+                    edge_ptr += 2
+            edges = edges[:edge_ptr]
+            edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
+            edge_index = torch_geometric.utils.to_undirected(edge_index)
+        else:
+            nbrs = cKDTree(pos_arr)
+            indices = nbrs.query_pairs(r=r, output_type='ndarray')
+            edge_index = torch.tensor(indices, dtype=torch.long).t().contiguous()
+            edge_index = torch_geometric.utils.to_undirected(edge_index)
+
+        # ── Build masks ───────────────────────────────────────────────────────
         train_mask = torch.zeros(N, dtype=torch.bool)
-        test_mask = torch.zeros(N, dtype=torch.bool)
+        val_mask   = torch.zeros(N, dtype=torch.bool)
+        test_mask  = torch.zeros(N, dtype=torch.bool)
         train_mask[train_idx] = True
-        test_mask[test_idx] = True
+        val_mask[val_idx]     = True
+        test_mask[test_idx]   = True
 
         self.data = Data(
-            x=torch.tensor(X_scaled, dtype=torch.float),       # node features
+            x=torch.tensor(X_scaled, dtype=torch.float),
             edge_index=edge_index,
             y=torch.tensor(y, dtype=torch.float).unsqueeze(1),
             pos=torch.tensor(pos_arr, dtype=torch.float),
         )
         self.data.train_mask = train_mask
-        self.data.test_mask = test_mask
+        self.data.val_mask   = val_mask
+        self.data.test_mask  = test_mask
 
         return self.data
 

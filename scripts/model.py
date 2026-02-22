@@ -18,10 +18,11 @@ class MLPRegressor(nn.Module):
 
 class GraphSAGENet(nn.Module):
     def __init__(self, in_channels, hidden_channels=64, num_layers=2, dropout=0.2,
-                 mlp_hidden=128, predict_var=False, use_layernorm=True):
+                 mlp_hidden=128, predict_var=False, use_layernorm=True, aggr='mean'):
         super().__init__()
         self.convs = nn.ModuleList()
         self.norms = nn.ModuleList()
+        self.aggr = aggr
 
         # first conv
         self.convs.append(SAGEConv(in_channels, hidden_channels))
@@ -29,7 +30,7 @@ class GraphSAGENet(nn.Module):
 
         # additional convs
         for _ in range(num_layers - 1):
-            self.convs.append(SAGEConv(hidden_channels, hidden_channels))
+            self.convs.append(SAGEConv(hidden_channels, hidden_channels, aggr=self.aggr))
             self.norms.append(nn.LayerNorm(hidden_channels) if use_layernorm else nn.Identity())
 
         self.dropout = dropout
@@ -64,9 +65,8 @@ class GraphSAGENet(nn.Module):
                 weights[f'conv_{i}_lin_r_bias'] = conv.lin_r.bias.data
         
         # Get MLP weights
-        mlp_weights = self.mlp.get_weights()
-        for key, value in mlp_weights.items():
-            weights[f'mlp_{key}'] = value
+        for name, param in self.mlp.named_parameters():
+            weights[f'mlp_{name}'] = param.data
             
         return weights
     
