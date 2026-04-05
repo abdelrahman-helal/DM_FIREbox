@@ -14,7 +14,24 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
 class DataProcessor():
+    """
+    Load FIREbox host halos and build a PyG ``Data`` with rich topology (kNN / WS / BA / radius).
+    """
+
     def __init__(self, file_path='../data/FIREbox_z=0.txt'):
+        """
+        Initialize paths and load the filtered host-halo table.
+
+        Parameters:
+        -----------
+        file_path : str
+            Path to the FIREbox text catalog (whitespace-separated, ``#`` comments).
+
+        Returns:
+        --------
+        None
+            Sets ``self.file_path``, ``self.df``, ``self.data``, and ``self.df_filtered``.
+        """
         self.file_path = file_path
         self.df = None
         self.data = Data()
@@ -23,18 +40,19 @@ class DataProcessor():
     def load_data(self):
         """
         Load FIREbox data from text file and process it.
-        
+
         Parameters:
         -----------
-        file_path : str
-            Path to the FIREbox_z=0.txt file
-            
+        None
+            Reads from ``self.file_path``.
+
         Returns:
         --------
         pd.DataFrame
             Processed dataframe with:
             - Only rows where hostHaloID = -1
             - Xc, Yc, Zc columns renamed to pos_x, pos_y, pos_z
+            Also assigns the full table to ``self.df``.
         """
         # Read the data file, skipping comment lines (starting with #)
         self.df = pd.read_csv(self.file_path, sep=r'\s+', comment='#')
@@ -65,6 +83,53 @@ class DataProcessor():
                       graph_type='knn',       # 'knn', 'ws', 'ba', or 'radius'
                       ws_beta=0.1, ws_lambda=0.5, ws_random_shortcuts=False,
                       ba_m=5, ba_a=0.01, ba_lambda=0.5, ba_gamma=1.0, ba_order_by='mass', ba_cutoff=None):
+        """
+        Filter galaxies, stratify splits, standardize features on training rows only, and build graph edges.
+
+        Parameters:
+        -----------
+        k : int or None
+            Neighbor count for kNN / WS / BA; for radius mode, unused (see ``r``).
+        r : float
+            Radius threshold for ``graph_type='radius'`` (cKDTree ``query_pairs``).
+        leaf_size : int
+            Unused; reserved for API compatibility.
+        test_size : float
+            Test split fraction.
+        val_size : float
+            Validation split fraction (relative to full graph).
+        standardize : bool
+            If True, fit ``StandardScaler`` on training rows only.
+        random_state : int
+            Random seed for splits.
+        stratify_bins : int or None
+            Halo-mass percentile bins for stratified splitting.
+        graph_type : str
+            One of ``'knn'``, ``'ws'``, ``'ba'``, or radius (else branch).
+        ws_beta : float
+            Rewiring probability for Watts–Strogatz edges.
+        ws_lambda : float
+            Spatial decay scale in WS (and kNN edge weights).
+        ws_random_shortcuts : bool
+            If True, WS rewiring picks a uniform random target.
+        ba_m : int
+            Edges to attach per new node in Barabási–Albert growth.
+        ba_a : float
+            Additive degree smoothing in BA attachment weights.
+        ba_lambda : float
+            Spatial decay for BA attachment kernel.
+        ba_gamma : float
+            Multiplier on halo overlap in BA fitness.
+        ba_order_by : str
+            ``'mass'`` or ``'random'`` node arrival order for BA.
+        ba_cutoff : float or None
+            Optional distance cutoff limiting BA candidate neighbors.
+
+        Returns:
+        --------
+        torch_geometric.data.Data
+            Graph with features, targets, positions, masks, and ``edge_attr`` when edge metadata exists.
+        """
 
         # Define feature columns and target (matches process_data.py column order)
         self.df_filtered = self.df_filtered[self.df_filtered['lg_Mstar_<Rhalo'] > 0]

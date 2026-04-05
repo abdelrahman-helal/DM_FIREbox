@@ -13,6 +13,27 @@ from model import GraphSAGENet
 
 
 def train_epoch(model, optimizer, loader, device, predict_var=False):
+    """
+    Run one NeighborLoader epoch, minimizing MSE on seed (batch root) nodes only.
+
+    Parameters:
+    -----------
+    model : torch.nn.Module
+        Graph model accepting a PyG mini-batch.
+    optimizer : torch.optim.Optimizer
+        Optimizer for ``model`` parameters.
+    loader : torch_geometric.loader.NeighborLoader
+        Mini-batch loader yielding subgraph batches with ``batch_size`` seeds.
+    device : torch.device
+        Device for tensors.
+    predict_var : bool
+        Reserved for heteroscedastic heads; currently unused.
+
+    Returns:
+    --------
+    float
+        Mean training loss averaged over all seed nodes seen in the epoch.
+    """
     model.train()
     total_loss = 0.0
     total_seen = 0
@@ -41,6 +62,29 @@ def train_epoch(model, optimizer, loader, device, predict_var=False):
 
 @torch.no_grad()
 def evaluate(model, loader, device, predict_var=False):
+    """
+    Aggregate predictions and targets across loader batches for seed nodes, then report RMSE.
+
+    Parameters:
+    -----------
+    model : torch.nn.Module
+        Graph model (same contract as ``train_epoch``).
+    loader : torch_geometric.loader.NeighborLoader
+        Loader over graph batches.
+    device : torch.device
+        Device for evaluation.
+    predict_var : bool
+        If True, expects ``(mu, logvar)`` from the model (not used by current net).
+
+    Returns:
+    --------
+    rmse : float
+        Root mean squared error over all seed predictions.
+    preds : numpy.ndarray
+        Concatenated predicted values.
+    trues : numpy.ndarray
+        Concatenated ground-truth values.
+    """
     model.eval()
     preds = []
     trues = []
@@ -63,7 +107,27 @@ def evaluate(model, loader, device, predict_var=False):
 
 
 def train_epoch_full_graph(model, optimizer, data, device, predict_var=False):
-    """Train on the full graph without using NeighborLoader"""
+    """
+    Perform one full-graph forward/backward step using only ``train_mask`` nodes in the loss.
+
+    Parameters:
+    -----------
+    model : torch.nn.Module
+        Full-graph GNN.
+    optimizer : torch.optim.Optimizer
+        Optimizer updated once per call.
+    data : torch_geometric.data.Data
+        Single graph on CPU or GPU with ``train_mask`` and ``y``.
+    device : torch.device
+        Device for the forward pass.
+    predict_var : bool
+        Reserved; current model returns a single output tensor.
+
+    Returns:
+    --------
+    float
+        Scalar training loss after the optimizer step.
+    """
     model.train()
     data = data.to(device)
 
@@ -92,16 +156,29 @@ def evaluate_full_graph(model, data, device, mask_name='val_mask'):
     """
     Evaluate on the full graph for a given split mask.
 
-    Parameters
-    ----------
+    Parameters:
+    -----------
+    model : torch.nn.Module
+        Trained GNN.
+    data : torch_geometric.data.Data
+        Graph with ``y`` and boolean masks.
+    device : torch.device
+        Evaluation device.
     mask_name : str
-        Attribute name on `data` for the boolean node mask to evaluate on.
-        Use 'val_mask' during training (early stopping) and 'test_mask' for
-        the final held-out evaluation.
+        Attribute on ``data`` for the boolean mask (e.g. ``'val_mask'``, ``'test_mask'``).
 
-    Returns
-    -------
-    rmse, mae, r2, preds (np.ndarray), trues (np.ndarray)
+    Returns:
+    --------
+    rmse : float
+        Root mean squared error on masked nodes.
+    mae : float
+        Mean absolute error on masked nodes.
+    r2 : float
+        Coefficient of determination on masked nodes.
+    preds : numpy.ndarray
+        Model outputs at masked nodes.
+    trues : numpy.ndarray
+        Targets at masked nodes.
     """
     model.eval()
     data = data.to(device)
@@ -125,6 +202,18 @@ def evaluate_full_graph(model, data, device, mask_name='val_mask'):
 
 
 def parse_args():
+    """
+    Parse command-line arguments for ``scripts/train.py``.
+
+    Parameters:
+    -----------
+    None
+
+    Returns:
+    --------
+    argparse.Namespace
+        Parsed arguments, including required ``--config`` path.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--config",
@@ -136,6 +225,18 @@ def parse_args():
 
 
 def main():
+    """
+    Load YAML config, train a GraphSAGE model on FIREbox, save the best weights, and log metrics.
+
+    Parameters:
+    -----------
+    None
+
+    Returns:
+    --------
+    None
+        Writes ``outputs/best_model.pt`` and prints metrics; optional Weights & Biases logging.
+    """
     args = parse_args()
 
     print("DEBUG: config path =", args.config)

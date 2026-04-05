@@ -10,8 +10,17 @@ import plotly.graph_objects as go
 
 def pyg_to_nx(data):
     """
-    input: PyG Data object
-    output: NetworkX graph
+    Convert a PyG ``Data`` object to an undirected ``networkx.Graph`` with node attributes.
+
+    Parameters:
+    -----------
+    data : torch_geometric.data.Data
+        Graph possibly containing ``x``, ``pos``, and ``y``.
+
+    Returns:
+    --------
+    networkx.Graph
+        Undirected graph with copied per-node features when present.
     """
     G = to_networkx(data, to_undirected=True)
 
@@ -29,8 +38,19 @@ def pyg_to_nx(data):
 # Compute network diagnostics
 def graph_metrics(G, topk_hubs=10):
     """
-    input: NetworkX graph
-    output: dictionary of network metrics
+    Compute basic structural statistics and the highest-degree hubs.
+
+    Parameters:
+    -----------
+    G : networkx.Graph
+        Input graph.
+    topk_hubs : int
+        Number of top-degree nodes to list.
+
+    Returns:
+    --------
+    dict
+        Keys include ``N``, ``E``, degree summaries, ``avg_clustering``, and ``top_hubs``.
     """
     N = G.number_of_nodes()
     E = G.number_of_edges()
@@ -59,7 +79,19 @@ def graph_metrics(G, topk_hubs=10):
 # Degree CCDF plot
 def plot_degree_ccdf(G, ax=None):
     """
-    input: NetworkX graph
+    Plot the complementary CDF of the degree distribution on log-log axes.
+
+    Parameters:
+    -----------
+    G : networkx.Graph
+        Graph whose degrees are histogrammed.
+    ax : matplotlib.axes.Axes or None
+        Axis to draw on; if None, a new figure and axis are created.
+
+    Returns:
+    --------
+    matplotlib.axes.Axes
+        The axis containing the CCDF step plot.
     """
     degrees = np.array([d for _, d in G.degree()])
     vals, counts = np.unique(degrees, return_counts=True)
@@ -81,6 +113,25 @@ def plot_degree_ccdf(G, ax=None):
 
 # Edge-length distribution (needs node positions)
 def plot_link_length_hist(G, bins=50, logy=True, ax=None):
+    """
+    Histogram Euclidean edge lengths using node ``pos`` attributes when present.
+
+    Parameters:
+    -----------
+    G : networkx.Graph
+        Graph with ``pos`` on nodes for length computation.
+    bins : int
+        Number of histogram bins.
+    logy : bool
+        If True, use a logarithmic y-axis.
+    ax : matplotlib.axes.Axes or None
+        Target axis; created if None.
+
+    Returns:
+    --------
+    matplotlib.axes.Axes
+        Axis with the histogram.
+    """
     lengths = []
     for u, v in G.edges():
         pu = G.nodes[u].get("pos")
@@ -105,6 +156,29 @@ def plot_link_length_hist(G, bins=50, logy=True, ax=None):
 
 # 3D Visualization (subsample + limited edges)
 def plot_3d_graph(G, graph_type='Graph',sample_frac=0.2, max_edges=20000, color_attr="y", node_size=5):
+    """
+    Render an interactive Plotly 3D scatter/line view of a subsampled graph.
+
+    Parameters:
+    -----------
+    G : networkx.Graph
+        Graph with ``pos`` attributes on nodes.
+    graph_type : str
+        Label used only in the figure title.
+    sample_frac : float
+        Fraction of nodes with positions to keep (random subsample).
+    max_edges : int
+        Cap on plotted edges after subsampling.
+    color_attr : str or None
+        Node attribute name for marker colors (default ``y`` / halo mass).
+    node_size : float
+        Plotly marker size.
+
+    Returns:
+    --------
+    None
+        Displays the figure via ``fig.show()``.
+    """
     pos = {n: G.nodes[n].get("pos") for n in G.nodes()}
     nodes = [n for n, p in pos.items() if p is not None]
 

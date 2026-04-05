@@ -4,7 +4,31 @@ import torch.nn.functional as F
 from torch_geometric.nn import SAGEConv
 
 class MLPRegressor(nn.Module):
+    """
+    Two-layer MLP head mapping node embeddings to a scalar regression output.
+    """
+
     def __init__(self, in_dim, mlp_hidden=128, dropout=0.2, use_layernorm=True, predict_var=False):
+        """
+        Build the MLP head.
+
+        Parameters:
+        -----------
+        in_dim : int
+            Input feature dimension per node.
+        mlp_hidden : int
+            Hidden width of the MLP.
+        dropout : float
+            Reserved for dropout (not applied in the current ``Sequential``).
+        use_layernorm : bool
+            Reserved for optional normalization (unused in current implementation).
+        predict_var : bool
+            whether to predict the variance of the target variable
+
+        Returns:
+        --------
+        None
+        """
         super().__init__()
         self.mlp = nn.Sequential(
             nn.Linear(in_dim, mlp_hidden),
@@ -14,11 +38,42 @@ class MLPRegressor(nn.Module):
         self.predict_var = predict_var
 
     def forward(self, x):
+        """Map batch of node embeddings ``x`` through the MLP and return shape ``[..., 1]`` logits."""
         return self.mlp(x)
 
 class GraphSAGENet(nn.Module):
+    """
+    Stacked GraphSAGE convolutions with LayerNorm, SiLU, dropout, and an ``MLPRegressor`` readout.
+    """
+
     def __init__(self, in_channels, hidden_channels=64, num_layers=2, dropout=0.2,
                  mlp_hidden=128, predict_var=False, use_layernorm=True, aggr='mean'):
+        """
+        Construct SAGEConv stacks and the regression MLP head.
+
+        Parameters:
+        -----------
+        in_channels : int
+            Input node feature size.
+        hidden_channels : int
+            Hidden size for each SAGE layer.
+        num_layers : int
+            Number of message-passing layers.
+        dropout : float
+            Dropout probability after activations.
+        mlp_hidden : int
+            Hidden width inside ``MLPRegressor``.
+        predict_var : bool
+            Passed through to ``MLPRegressor``.
+        use_layernorm : bool
+            If True, apply ``LayerNorm`` after each conv; else ``Identity``.
+        aggr : str
+            Aggregation scheme for SAGE layers after the first (e.g. ``'mean'``).
+
+        Returns:
+        --------
+        None
+        """
         super().__init__()
         self.convs = nn.ModuleList()
         self.norms = nn.ModuleList()
@@ -41,6 +96,7 @@ class GraphSAGENet(nn.Module):
         self.hidden_channels = hidden_channels
 
     def forward(self, data):
+        """Encode PyG ``data`` (``x``, ``edge_index``) through SAGE layers and return per-node scalar predictions."""
         x, edge_index = data.x, data.edge_index
         for conv, ln in zip(self.convs, self.norms):
             x = conv(x, edge_index)
@@ -53,7 +109,18 @@ class GraphSAGENet(nn.Module):
         return out
     
     def get_all_weights(self):
-        """Get all weights from the entire model"""
+        """
+        Collect learnable tensors from conv and MLP submodules.
+
+        Parameters:
+        -----------
+        None
+
+        Returns:
+        --------
+        dict
+            Maps string names to parameter tensors (CPU data references).
+        """
         weights = {}
         
         # Get GraphSAGE layer weights
@@ -71,7 +138,7 @@ class GraphSAGENet(nn.Module):
         return weights
     
     def get_weight_summary(self):
-        """Get a summary of all weight shapes and statistics"""
+        """Compute shape/mean/std/min/max stats for every tensor from ``get_all_weights``. Returns a nested summary dict."""
         weights = self.get_all_weights()
         summary = {}
         
@@ -87,19 +154,19 @@ class GraphSAGENet(nn.Module):
     
     def predict(self, data, device=None):
         """
-        Get predictions for the entire dataset
-        
+        Run inference for all nodes and return CPU predictions.
+
         Parameters:
         -----------
         data : torch_geometric.data.Data
-            The graph data object
-        device : torch.device, optional
-            Device to run inference on. If None, uses model's device
-            
+            Full graph to evaluate.
+        device : torch.device or None
+            If None, uses the device of the first model parameter.
+
         Returns:
         --------
         torch.Tensor
-            Predictions for all nodes in the dataset
+            1-D float tensor of predictions aligned with node index order.
         """
         if device is None:
             device = next(self.parameters()).device
@@ -113,23 +180,19 @@ class GraphSAGENet(nn.Module):
     
     def predict_train_test(self, data, device=None):
         """
-        Get predictions separately for training and test sets
-        
+        Split full-graph predictions and targets into train and test subsets.
+
         Parameters:
         -----------
         data : torch_geometric.data.Data
-            The graph data object with train_mask and test_mask
-        device : torch.device, optional
-            Device to run inference on. If None, uses model's device
-            
+            Graph with ``train_mask``, ``test_mask``, and ``y``.
+        device : torch.device or None
+            Inference device; defaults to model parameter device.
+
         Returns:
         --------
         dict
-            Dictionary containing:
-            - 'train_pred': predictions for training nodes
-            - 'test_pred': predictions for test nodes
-            - 'train_true': true values for training nodes
-            - 'test_true': true values for test nodes
+            Keys ``train_pred``, ``test_pred``, ``train_true``, ``test_true`` mapping to 1-D CPU tensors.
         """
         if device is None:
             device = next(self.parameters()).device

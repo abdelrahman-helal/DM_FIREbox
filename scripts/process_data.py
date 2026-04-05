@@ -12,7 +12,24 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
 class DataProcessor():
+    """
+    Load FIREbox host halos and build a standard PyG graph (kNN or radius) for halo-mass regression.
+    """
+
     def __init__(self, file_path='../data/FIREbox_z=0.txt'):
+        """
+        Initialize paths and load the filtered host-halo table.
+
+        Parameters:
+        -----------
+        file_path : str
+            Path to the FIREbox text catalog (whitespace-separated, ``#`` comments).
+
+        Returns:
+        --------
+        None
+            Sets ``self.file_path``, ``self.df``, ``self.data``, and ``self.df_filtered``.
+        """
         self.file_path = file_path
         self.df = None
         self.data = Data()
@@ -21,18 +38,19 @@ class DataProcessor():
     def load_data(self):
         """
         Load FIREbox data from text file and process it.
-        
+
         Parameters:
         -----------
-        file_path : str
-            Path to the FIREbox_z=0.txt file
-            
+        None
+            Reads from ``self.file_path``.
+
         Returns:
         --------
         pd.DataFrame
             Processed dataframe with:
             - Only rows where hostHaloID = -1
             - Xc, Yc, Zc columns renamed to pos_x, pos_y, pos_z
+            Also assigns the full table to ``self.df``.
         """
         # Read the data file, skipping comment lines (starting with #)
         self.df = pd.read_csv(self.file_path, sep=r'\s+', comment='#')
@@ -61,24 +79,33 @@ class DataProcessor():
                         standardize=True, random_state=42, include_Rhalo=False,
                         stratify_bins=10):
         """
-        Create a PyTorch Geometric graph from the FIREbox data.
+        Filter galaxies, stratify train/val/test, optionally add Rhalo, and build kNN or radius edges.
 
         Parameters:
         -----------
-        k : int
-            Number of nearest neighbors for graph connectivity (None → radius-based)
+        k : int or None
+            Number of nearest neighbors (excluding self); if None, use radius graph with ``r``.
         r : float
-            Radius for radius-based connectivity (used when k is None)
+            Pairwise distance threshold for radius graph when ``k`` is None.
+        leaf_size : int
+            Unused (reserved for tree backends); kept for API compatibility.
         test_size : float
-            Fraction of data held out as the final test set (default 0.10)
+            Fraction of nodes in the held-out test split.
         val_size : float
-            Fraction of data used for validation / early-stopping (default 0.10)
+            Fraction of nodes in the validation split (relative to full graph).
+        standardize : bool
+            If True, fit ``StandardScaler`` on training rows only, then transform all rows.
         random_state : int
-            Random seed for reproducibility
+            Seed for stratified train/val/test splits.
         include_Rhalo : bool
-            Whether to add Rhalo as an input feature
-        stratify_bins : int
-            Number of mass-percentile bins used to stratify all splits
+            If True, append ``Rhalo`` to node features.
+        stratify_bins : int or None
+            Number of halo-mass percentile bins for stratified splitting; None disables stratification.
+
+        Returns:
+        --------
+        torch_geometric.data.Data
+            Graph with ``x``, ``edge_index``, ``y``, ``pos``, and ``train_mask`` / ``val_mask`` / ``test_mask``.
         """
 
         # Define feature columns and target

@@ -10,23 +10,67 @@ from sklearn.neighbors import NearestNeighbors
 rng = default_rng(42)
 
 def _pairwise_distance(a, b):
-    # a: (3,), b: (N,3) -> returns (N,)
+    """
+    Euclidean distances from one 3-vector to many 3-vectors.
+
+    Parameters:
+    -----------
+    a : numpy.ndarray
+        Shape ``(3,)`` reference point.
+    b : numpy.ndarray
+        Shape ``(N, 3)`` collection of points.
+
+    Returns:
+    --------
+    numpy.ndarray
+        Length-``N`` distances.
+    """
     return np.linalg.norm(b - a, axis=1)
 
 def overlap_fraction(d, ri, rj):
-    # overlap fraction in [0,1], 0 if no overlap
+    """
+    Symmetric overlap fraction for two spheres given center separation and radii.
+
+    Parameters:
+    -----------
+    d : float
+        Distance between sphere centers.
+    ri, rj : float
+        Radii of the two spheres.
+
+    Returns:
+    --------
+    float
+        Value in ``[0, 1]``; zero when spheres do not overlap.
+    """
     ov = max(0.0, (ri + rj - d) / (ri + rj))
     return ov
 
 def build_spatial_ws_edges(pos_arr, radii, K, beta=0.1, lambda_decay=1.0, random_shortcuts=False):
     """
-    pos_arr: (N,3) numpy array (already scaled coordinates)
-    radii: (N,) numpy array (in same scale as pos_arr distances)
-    K: int, number of neighbors (must match the k used in kNN)
-    beta: rewiring probability
-    lambda_decay: spatial decay scale (multiplies normalized distance)
-    random_shortcuts: if True, choose new endpoint uniformly at random (ignores spatial bias)
-    Returns undirected edge_index (torch.tensor [2,E]) and edge_attr dict (distance, overlap, weight)
+    Build a spatial Watts–Strogatz graph starting from kNN connectivity.
+
+    Parameters:
+    -----------
+    pos_arr : numpy.ndarray
+        Shape ``(N, 3)`` scaled coordinates.
+    radii : numpy.ndarray
+        Shape ``(N,)`` halo radii in the same distance units as ``pos_arr``.
+    K : int
+        Number of nearest neighbors (excluding self) before rewiring.
+    beta : float
+        Probability of rewiring each directed stub.
+    lambda_decay : float
+        Spatial kernel scale in normalized distance.
+    random_shortcuts : bool
+        If True, new endpoints are uniform random; else spatially weighted.
+
+    Returns:
+    --------
+    edge_index : torch.Tensor
+        Shape ``[2, E]`` undirected unique edges.
+    edge_attr : dict
+        Tensors with keys ``distance``, ``overlap``, and ``weight`` (column vectors).
     """
     N = pos_arr.shape[0]
     # initial kNN (symmetric)
@@ -106,16 +150,35 @@ def build_spatial_ws_edges(pos_arr, radii, K, beta=0.1, lambda_decay=1.0, random
 def build_spatial_ba_edges(pos_arr, radii, mass_array=None, m=2, a=0.01, lambda_decay=1.0, gamma=1.0,
                            order_by='mass', candidate_cutoff=None):
     """
-    Spatial Barabasi-Albert preferential attachment.
-    pos_arr: (N,3)
-    radii: (N,)
-    mass_array: optional (N,) array to order by (lg_Mhalo). If None and order_by=='mass', will use random.
-    m: edges to attach per new node
-    a: additive constant in (deg + a)
-    lambda_decay: spatial decay
-    gamma: overlap boost multiplier
-    order_by: 'mass' or 'random'
-    candidate_cutoff: optional distance cutoff (in same units as pos_arr) to limit candidates (speeds up)
+    Grow a spatial Barabási–Albert graph with preferential attachment modulated by distance and overlap.
+
+    Parameters:
+    -----------
+    pos_arr : numpy.ndarray
+        Shape ``(N, 3)`` coordinates.
+    radii : numpy.ndarray
+        Shape ``(N,)`` radii for overlap and distance scaling.
+    mass_array : numpy.ndarray or None
+        Optional ``(N,)`` masses for arrival order when ``order_by='mass'``.
+    m : int
+        Target number of edges per arriving node.
+    a : float
+        Additive smoothing on degrees in attachment weights.
+    lambda_decay : float
+        Spatial decay constant in the attachment kernel.
+    gamma : float
+        Strength multiplier for halo-overlap boosting.
+    order_by : str
+        ``'mass'`` (requires ``mass_array``) or ``'random'`` arrival order.
+    candidate_cutoff : float or None
+        Optional max distance to existing nodes when sampling attachments.
+
+    Returns:
+    --------
+    edge_index : torch.Tensor
+        Undirected edges ``[2, E]``.
+    edge_attr : dict
+        Same structure as ``build_spatial_ws_edges`` when edges exist; empty dict if no edges.
     """
     N = pos_arr.shape[0]
     if order_by == 'mass' and mass_array is not None:

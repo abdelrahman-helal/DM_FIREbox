@@ -11,7 +11,24 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 
 class TNGDataProcessor():
+    """
+    Load IllustrisTNG subhalo parquet and expose FIREbox-compatible graph construction.
+    """
+
     def __init__(self, file_path='../data/tng-data/TNG300-1-subhalos_99.parquet'):
+        """
+        Initialize paths and load the renamed TNG subhalo table.
+
+        Parameters:
+        -----------
+        file_path : str
+            Path to the TNG subhalos parquet file.
+
+        Returns:
+        --------
+        None
+            Sets ``self.file_path``, ``self.df``, ``self.data``, and ``self.df_filtered``.
+        """
         self.file_path = file_path
         self.df = None
         self.data = Data()
@@ -20,16 +37,17 @@ class TNGDataProcessor():
     def load_data(self):
         """
         Load TNG subhalos data from parquet file and process it.
-        
+
         Parameters:
         -----------
-        file_path : str
-            Path to the TNG subhalos parquet file
-            
+        None
+            Reads from ``self.file_path``.
+
         Returns:
         --------
         pd.DataFrame
-            Processed dataframe with renamed columns to match FIREbox convention
+            Processed dataframe with renamed columns to match FIREbox convention.
+            Also assigns the raw table to ``self.df``.
         """
         # Read the parquet file
         self.df = pd.read_parquet(self.file_path)
@@ -54,20 +72,27 @@ class TNGDataProcessor():
 
         Parameters:
         -----------
-        k : int
-            Number of nearest neighbors for graph connectivity (None → radius-based)
+        k : int or None
+            Number of nearest neighbors for graph connectivity (None → radius-based).
         r : float
-            Radius for radius-based connectivity (used when k is None)
+            Radius for radius-based connectivity (used when ``k`` is None).
+        leaf_size : int
+            Unused; reserved for API compatibility.
         test_size : float
-            Fraction of data held out as the final test set (default 0.10)
+            Fraction of data held out as the final test set (default 0.10).
         val_size : float
-            Fraction of data used for validation / early-stopping (default 0.10)
-        random_state : int
-            Random seed for reproducibility
+            Fraction of data used for validation / early-stopping (default 0.10).
         standardize : bool
-            Whether to standardize features
-        stratify_bins : int
-            Number of mass-percentile bins used to stratify all splits
+            Whether to standardize features (train-fit scaler).
+        random_state : int
+            Random seed for reproducibility.
+        stratify_bins : int or None
+            Number of mass-percentile bins used to stratify all splits.
+
+        Returns:
+        --------
+        torch_geometric.data.Data
+            Object with ``x``, ``edge_index``, ``y``, ``pos``, and train/val/test masks.
         """
 
         feature_cols = ['pos_x', 'pos_y', 'pos_z', 'vel_x', 'vel_y', 'vel_z', 'stellar_mass']

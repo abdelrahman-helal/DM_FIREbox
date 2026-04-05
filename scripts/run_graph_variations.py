@@ -58,6 +58,19 @@ data_ba = dp_ba.data
 
 # ── Initialise models ─────────────────────────────────────────────────────────
 def make_model(in_channels):
+    """
+    Instantiate ``GraphSAGENet`` with script-level hyperparameters on ``DEVICE``.
+
+    Parameters:
+    -----------
+    in_channels : int
+        Width of the input node feature matrix.
+
+    Returns:
+    --------
+    GraphSAGENet
+        Model moved to ``DEVICE``.
+    """
     return GraphSAGENet(in_channels=in_channels,
                         hidden_channels=HIDDEN_CHANNELS,
                         num_layers=NUM_LAYERS,
@@ -69,6 +82,23 @@ model_ba     = make_model(data_ba.x.size(1))
 
 # ── Training helper ───────────────────────────────────────────────────────────
 def train_model(model, data, tag):
+    """
+    Train with full-graph updates and restore the best validation-RMSE weights.
+
+    Parameters:
+    -----------
+    model : GraphSAGENet
+        Model to optimize.
+    data : torch_geometric.data.Data
+        Graph with masks for training/validation.
+    tag : str
+        Label printed in epoch logs.
+
+    Returns:
+    --------
+    float
+        Best validation RMSE observed during training.
+    """
     optimizer   = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
     best_rmse   = float('inf')
     best_state  = None
@@ -98,6 +128,23 @@ best_rmse_ba = train_model(model_ba, data_ba, 'BA')
 
 # ── Test-set predictions ──────────────────────────────────────────────────────
 def test_preds(model, data):
+    """
+    Return ground-truth and predicted halo masses on the test split.
+
+    Parameters:
+    -----------
+    model : GraphSAGENet
+        Trained model.
+    data : torch_geometric.data.Data
+        Graph with ``test_mask`` and ``y``.
+
+    Returns:
+    --------
+    true : torch.Tensor
+        1-D test targets on CPU.
+    pred : torch.Tensor
+        1-D test predictions on CPU.
+    """
     all_pred = model.predict(data, DEVICE)
     all_true = data.y.view(-1).cpu()
     mask     = data.test_mask.cpu()
@@ -115,6 +162,24 @@ r2_ba = r2_score(true_ba.numpy(), pred_ba.numpy())
 fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharex=True)
 
 def scatter_panel(ax, true, pred, r2, title):
+    """
+    Draw predicted vs true values with a y=x reference line.
+
+    Parameters:
+    -----------
+    ax : matplotlib.axes.Axes
+        Target subplot.
+    true, pred : torch.Tensor or array-like
+        1-D targets and predictions (same length).
+    r2 : float
+        Unused; kept so callers can pass scores for future labeling.
+    title : str
+        Subplot title string.
+
+    Returns:
+    --------
+    None
+    """
     ax.scatter(true, pred, alpha=0.6, s=10, color='orange')
     lo, hi = float(min(true.min(), pred.min())), float(max(true.max(), pred.max()))
     ax.plot([lo, hi], [lo, hi], 'r--', alpha=0.8)

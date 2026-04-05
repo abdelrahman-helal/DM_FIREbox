@@ -52,6 +52,21 @@ print(f"  TNG:     {tng_data.x.size(0)} nodes, {tng_data.edge_index.size(1)} edg
 
 # ── Experiment runner ─────────────────────────────────────────────────────────
 def run_experiment(train_ds_name, test_ds_name):
+    """
+    Train on one simulation graph, select weights using the other's validation mask, evaluate on its test mask.
+
+    Parameters:
+    -----------
+    train_ds_name : str
+        ``'firebox'`` or ``'tng'`` selecting the training graph.
+    test_ds_name : str
+        ``'firebox'`` or ``'tng'`` selecting the graph used for val/test metrics.
+
+    Returns:
+    --------
+    dict
+        Keys ``label``, ``train``, ``test``, ``rmse``, ``mae``, ``r2``, ``pred``, ``true``.
+    """
     train_data = firebox_data if train_ds_name == 'firebox' else tng_data
     test_data  = firebox_data if test_ds_name  == 'firebox' else tng_data
 
